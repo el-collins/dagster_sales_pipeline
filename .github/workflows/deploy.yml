@@ -22,7 +22,7 @@ jobs:
         script: |
           # Install required system packages
           sudo apt-get update
-          sudo apt-get install -y python3-venv python3-pip git
+          sudo apt-get install -y python3-venv python3-pip git net-tools
 
           # Create app directory if it doesn't exist
           mkdir -p ~/airbnb-analytics
@@ -48,8 +48,35 @@ jobs:
           # Create data directory if it doesn't exist
           mkdir -p data
           
-          # Create persistent Dagster home directory
+          # Create and configure Dagster home directory
           mkdir -p ~/dagster_home
+          
+          # Create dagster.yaml configuration file
+          cat > ~/dagster_home/dagster.yaml << EOF
+          storage:
+            sqlite:
+              base_dir: /home/ubuntu/dagster_home
+
+          compute_logs:
+            module: dagster.core.storage.local_compute_log_manager
+            class: LocalComputeLogManager
+            config:
+              base_dir: /home/ubuntu/dagster_home/compute_logs
+
+          local_artifact_storage:
+            module: dagster.core.storage.root
+            class: LocalArtifactStorage
+            config:
+              base_dir: /home/ubuntu/dagster_home/storage
+
+          scheduler:
+            module: dagster.core.scheduler
+            class: DagsterDaemonScheduler
+
+          run_coordinator:
+            module: dagster.core.run_coordinator
+            class: QueuedRunCoordinator
+          EOF
           
           # Create systemd service file
           sudo tee /etc/systemd/system/dagster.service << EOF
@@ -72,6 +99,9 @@ jobs:
           WantedBy=multi-user.target
           EOF
           
+          # Set proper permissions
+          sudo chown -R ubuntu:ubuntu ~/dagster_home
+          
           # Reload systemd and restart service
           sudo systemctl daemon-reload
           sudo systemctl enable dagster
@@ -82,4 +112,4 @@ jobs:
           sudo systemctl status dagster
           
           # Verify port is listening
-          netstat -tulpn | grep 3000 
+          sudo netstat -tulpn | grep 3000 
