@@ -20,16 +20,33 @@ jobs:
         username: ubuntu
         key: ${{ secrets.EC2_SSH_KEY }}
         script: |
-          # Setup application
-          cd ~/airbnb-analytics
-          git pull origin main
+          # Install required system packages
+          sudo apt-get update
+          sudo apt-get install -y python3-venv python3-pip git
+
+          # Create app directory if it doesn't exist
+          mkdir -p ~/airbnb-analytics
           
-          # Create and activate virtual environment if it doesn't exist
-          python3 -m venv venv || true
+          # Clone/pull repository
+          if [ -d "~/airbnb-analytics/.git" ]; then
+            cd ~/airbnb-analytics
+            git pull origin main
+          else
+            rm -rf ~/airbnb-analytics
+            git clone ${{ github.server_url }}/${{ github.repository }} ~/airbnb-analytics
+            cd ~/airbnb-analytics
+          fi
+          
+          # Setup Python virtual environment
+          python3 -m venv venv
           source venv/bin/activate
           
-          # Install dependencies
+          # Upgrade pip and install dependencies
+          python3 -m pip install --upgrade pip
           python3 -m pip install -r requirements.txt
+          
+          # Create data directory if it doesn't exist
+          mkdir -p data
           
           # Create systemd service file
           sudo tee /etc/systemd/system/dagster.service << EOF
@@ -38,10 +55,14 @@ jobs:
           After=network.target
 
           [Service]
+          Type=simple
           User=ubuntu
           WorkingDirectory=/home/ubuntu/airbnb-analytics
           Environment="PATH=/home/ubuntu/airbnb-analytics/venv/bin"
+          Environment="PYTHONPATH=/home/ubuntu/airbnb-analytics"
           ExecStart=/home/ubuntu/airbnb-analytics/venv/bin/dagster dev -f sales_pipeline/assets.py --host 0.0.0.0
+          Restart=always
+          RestartSec=1
 
           [Install]
           WantedBy=multi-user.target
@@ -50,4 +71,8 @@ jobs:
           # Reload systemd and restart service
           sudo systemctl daemon-reload
           sudo systemctl enable dagster
-          sudo systemctl restart dagster 
+          sudo systemctl restart dagster
+          
+          # Wait for service to start and check status
+          sleep 5
+          sudo systemctl status dagster 
