@@ -1,0 +1,53 @@
+name: Deploy Dagster App
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Deploy to EC2
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ubuntu
+        key: ${{ secrets.EC2_SSH_KEY }}
+        script: |
+          # Setup application
+          cd ~/airbnb-analytics
+          git pull origin main
+          
+          # Create and activate virtual environment if it doesn't exist
+          python3 -m venv venv || true
+          source venv/bin/activate
+          
+          # Install dependencies
+          python3 -m pip install -r requirements.txt
+          
+          # Create systemd service file
+          sudo tee /etc/systemd/system/dagster.service << EOF
+          [Unit]
+          Description=Dagster Server
+          After=network.target
+
+          [Service]
+          User=ubuntu
+          WorkingDirectory=/home/ubuntu/airbnb-analytics
+          Environment="PATH=/home/ubuntu/airbnb-analytics/venv/bin"
+          ExecStart=/home/ubuntu/airbnb-analytics/venv/bin/dagster dev -f sales_pipeline/assets.py --host 0.0.0.0
+
+          [Install]
+          WantedBy=multi-user.target
+          EOF
+          
+          # Reload systemd and restart service
+          sudo systemctl daemon-reload
+          sudo systemctl enable dagster
+          sudo systemctl restart dagster 
