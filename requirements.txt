@@ -1,0 +1,7 @@
+dagster
+dagster-webserver
+pandas
+pydantic
+pytest
+python-dotenv
+requests
