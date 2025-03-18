@@ -48,6 +48,9 @@ jobs:
           # Create data directory if it doesn't exist
           mkdir -p data
           
+          # Create persistent Dagster home directory
+          mkdir -p ~/dagster_home
+          
           # Create systemd service file
           sudo tee /etc/systemd/system/dagster.service << EOF
           [Unit]
@@ -60,7 +63,8 @@ jobs:
           WorkingDirectory=/home/ubuntu/airbnb-analytics
           Environment="PATH=/home/ubuntu/airbnb-analytics/venv/bin"
           Environment="PYTHONPATH=/home/ubuntu/airbnb-analytics"
-          ExecStart=/home/ubuntu/airbnb-analytics/venv/bin/dagster dev -f sales_pipeline/assets.py --host 0.0.0.0
+          Environment="DAGSTER_HOME=/home/ubuntu/dagster_home"
+          ExecStart=/home/ubuntu/airbnb-analytics/venv/bin/dagster dev -f sales_pipeline/assets.py --host 0.0.0.0 --port 3000
           Restart=always
           RestartSec=1
 
@@ -75,4 +79,7 @@ jobs:
           
           # Wait for service to start and check status
           sleep 5
-          sudo systemctl status dagster 
+          sudo systemctl status dagster
+          
+          # Verify port is listening
+          netstat -tulpn | grep 3000 
