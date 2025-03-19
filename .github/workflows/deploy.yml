@@ -102,14 +102,34 @@ jobs:
           # Set proper permissions
           sudo chown -R ubuntu:ubuntu ~/dagster_home
           
+          # Stop any existing service
+          sudo systemctl stop dagster || true
+          
           # Reload systemd and restart service
           sudo systemctl daemon-reload
           sudo systemctl enable dagster
           sudo systemctl restart dagster
           
-          # Wait for service to start and check status
-          sleep 5
-          sudo systemctl status dagster
+          # Wait for service to start
+          echo "Waiting for Dagster service to start..."
+          sleep 10
           
-          # Verify port is listening
-          sudo netstat -tulpn | grep 3000 
+          # Check service status
+          if ! systemctl is-active --quiet dagster; then
+            echo "Dagster service failed to start"
+            sudo systemctl status dagster
+            exit 1
+          fi
+          
+          # Check if port is in use
+          if ! timeout 5 bash -c "until sudo netstat -tulpn | grep :3000 > /dev/null; do sleep 1; done"; then
+            echo "Port 3000 is not listening after 5 seconds"
+            exit 1
+          fi
+          
+          echo "Dagster deployment completed successfully"
+          echo "Service Status:"
+          sudo systemctl status dagster --no-pager
+          
+          echo "Port Status:"
+          sudo netstat -tulpn | grep :3000 || true 
